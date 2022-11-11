@@ -1,0 +1,9 @@
+sprite JAKTA0,31,17{
+	offset 15,17
+	patch JAKTA0,0,0
+}
+
+graphic JAKET0,31,17{
+	offset 15,17
+	patch JAKTA0,0,0{translation "0:255=%[0,0,0]:[0.3,0.14,0]"}
+}
