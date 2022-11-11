@@ -11,7 +11,10 @@ all over the place.
 Not as durable as garrison armor, but less 
 bulky and easier to stash in a backpack.
 
-Loadout code: [JKT]
+Loadout code: 
+
+[AWL] - Leather Jacket (Worn)
+[ARL] - Leather Jacket (Spare)
 
 Credits:
 
