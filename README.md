@@ -14,6 +14,7 @@ bulky and easier to stash in a backpack.
 Loadout code: 
 
 [AWL] - Leather Jacket (Worn)
+
 [ARL] - Leather Jacket (Spare)
 
 Credits:
