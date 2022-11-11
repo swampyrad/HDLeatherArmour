@@ -2,22 +2,29 @@
 // Leather Armour (a thick, padded biker jacket)
 //-------------------------------------------------
 const LEATHERARMOUR=50;
-const ENC_LEATHERARMOUR=100;
-//const HDCONST_BATTLEARMOUR=70;
-//const HDCONST_GARRISONARMOUR=144;
+const ENC_LEATHERARMOUR=160;
 
-class HDLeatherArmour:HDArmour{
+class HDLeatherArmour:HDMagAmmo{
 	default{
-		//+inventory.invbar
-		//+hdpickup.cheatnogive
-		//+hdpickup.notinpockets
-		//+inventory.isarmor
-		//inventory.amount 1;
+		+inventory.invbar
+		+hdpickup.cheatnogive
+		+hdpickup.notinpockets
+		+inventory.isarmor
+		inventory.amount 1;
 		hdmagammo.maxperunit LEATHERARMOUR;
 		hdmagammo.magbulk ENC_LEATHERARMOUR;
 		tag "leather jacket";
 		inventory.icon "JAKTA0";
 		inventory.pickupmessage "Picked up a leather jacket.";
+	}
+	
+	bool mega;
+	int cooldown;
+	override bool isused(){return true;}
+	override int getsbarnum(int flags){
+		int ms=mags.size()-1;
+		if(ms<0)return -1000000;
+		return mags[ms]%1000;
 	}
 	
 	override string pickupmessage(){
@@ -71,7 +78,7 @@ class HDLeatherArmour:HDArmour{
 		}
 
 		//and finally put on the actual armour
-		HDLeatherArmour.JacketChangeEffect(self,100);
+		HDLeatherArmour.JacketChangeEffect(self,50);
 		A_GiveInventory("HDLeatherArmourWorn");
 		let worn=HDLeatherArmourWorn(FindInventory("HDLeatherArmourWorn"));
 
@@ -91,6 +98,11 @@ class HDLeatherArmour:HDArmour{
 
 		invoker.syncamount();
 	}
+	
+	override void doeffect(){
+		if(cooldown>0)cooldown--;
+		if(!amount)destroy();
+	}
 
 	override void syncamount(){
 		if(amount<1){destroy();return;}
@@ -98,27 +110,27 @@ class HDLeatherArmour:HDArmour{
 		for(int i=0;i<amount;i++){
 			mags[i]=min(mags[i],LEATHERARMOUR);
 		}
-		checkmega();
+		//checkmega();
 	}
 
 	override inventory createtossable(int amt){
 		let sct=super.createtossable(amt);
 		return sct;
 	}
-
+/*
     bool checkmega(){
 		mega=0;
 		icon=texman.checkfortexture("JAKTA0",TexMan.Type_MiscPatch);
 		return mega;
 	}
-
+*/
 	override void beginplay(){
 		super.beginplay();
 		cooldown=0;
 		if(!mags.size())mags.push(LEATHERARMOUR); //not vital, just sets a default
 	}
 
-	override void consolidate(){}
+    override void consolidate(){}
 	override double getbulk(){
 		syncamount();
 		double blk=0;
@@ -158,11 +170,10 @@ class HDLeatherArmour:HDArmour{
 		int durability=mags[mags.size()-1];
 		HDLeatherArmour aaa=HDLeatherArmour(other.findinventory("HDLeatherArmour"));
 
-		//one megaarmour = 2 regular armour
 		if(aaa){
-			double totalbulk=(durability>=1000)?2.:1.;
+			double totalbulk=0.5;
 			for(int i=0;i<aaa.mags.size();i++){
-				totalbulk+=(aaa.mags[i]>=1000)?2.:1.;
+				totalbulk+=0.5;
 			}
 			if(totalbulk*hdmath.getencumbrancemult()>3.)return;
 		}
@@ -171,7 +182,7 @@ class HDLeatherArmour:HDArmour{
 		aaa.syncamount();
 		aaa.mags.insert(0,durability);
 		aaa.mags.pop();
-		aaa.checkmega();
+		//aaa.checkmega();
 		other.A_StartSound(pickupsound,CHAN_AUTO);
 		HDPickup.LogPickupMessage(other,pickupmessage());
 	}
@@ -282,6 +293,314 @@ class HDLeatherArmourWorn:HDArmourWorn{
 		TNT1 A 0;
 		stop;
 	}
+	
+	//called from HDPlayerPawn and HDMobBase's DamageMobj
+	override int,name,int,double,int,int,int HandleDamage(
+		int damage,
+		name mod,
+		int flags,
+		actor inflictor,
+		actor source,
+		double towound,
+		int toburn,
+		int tostun,
+		int tobreak
+	){
+		let victim=owner;
+
+		//approximation of "thickness" of armour
+		int alv=1;//same as garrison armor
+
+		if(
+			(flags&DMG_NO_ARMOR)
+			||mod=="staples"
+			||mod=="maxhpdrain"
+			||mod=="internal"
+			||mod=="jointlock"
+			||mod=="falling"
+			||mod=="slime"
+			||mod=="bleedout"
+			||mod=="drowning"
+			||mod=="poison"
+			||mod=="electrical"
+			||durability<random(1,24) //it's just a leather jacket, the hell do you want??
+			||!victim
+		)return damage,mod,flags,towound,toburn,tostun,tobreak;
+
+
+		//which is just a vest not a bubble...
+		if(
+			inflictor
+			&&inflictor.default.bmissile
+		){
+			double impactheight=inflictor.pos.z+inflictor.height*0.5;
+			double shoulderheight=victim.pos.z+victim.height-16;
+			double waistheight=victim.pos.z+victim.height*0.4;
+			double impactangle=absangle(victim.angle,victim.angleto(inflictor));
+			if(impactangle>90)impactangle=180-impactangle;
+			bool shouldhitflesh=(
+				impactheight>shoulderheight
+				||impactheight<waistheight
+				||impactangle>80
+			)?!random(0,5):!random(0,31);
+			if(shouldhitflesh)alv=0;
+			else if(impactangle>80)alv=random(1,alv);
+		}
+
+		//missed the armour entirely
+		if(alv<1)return damage,mod,flags,towound,toburn,tostun,tobreak;
+
+
+		//some numbers
+		int tobash=0;
+		int armourdamage=0;
+
+		int resist=0;
+		if(durability<HDCONST_BATTLEARMOUR){
+			int breakage=HDCONST_BATTLEARMOUR-durability;
+			resist-=random(0,breakage);
+		}
+
+		int originaldamage=damage;
+
+
+		//start treating damage types
+		if(
+			mod=="hot"
+			||mod=="cold"
+		){
+			if(random(0,alv)){
+				damage=max(random(0,1-random(0,alv)),damage-50);//+40% thermal resistance
+				if(!random(0,100-damage))armourdamage+=(damage>>3);//2x more likely to take armour damage
+			}
+		}else if(mod=="piercing"){
+			resist+=20*(alv+1);//-33% piercing resistance
+			if(resist>0){
+				damage-=resist;
+				tobash=min(originaldamage,resist)>>3;
+			}
+			armourdamage=random(0,originaldamage>>2);
+		}else if(mod=="slashing"){
+			resist+=80+25*alv;//-20% slash resistance
+			if(resist>0){
+				damage-=resist;
+				tobash=min(originaldamage,resist)>>2;
+			}
+			armourdamage=random(0,originaldamage>>2);
+		}else if(
+			mod=="teeth"
+			||mod=="claws"
+			||mod=="natural"
+		){
+			resist+=random((alv<<4),80+40*alv);//-20% puncture resistance
+			if(resist>0){
+				damage-=resist;
+				tobash=min(originaldamage,resist)>>3;
+			}
+			armourdamage=random(0,originaldamage>>3);
+		}else if(
+			mod=="balefire"
+		){
+			if(random(0,alv)){
+				towound-=max(1,damage>>2);
+				armourdamage=random(0,damage>>2);
+			}
+		}else if(
+			mod=="bashing"
+			||mod=="melee"
+		){
+			armourdamage=clamp((originaldamage>>3),0,random(0,alv));
+
+			//player punch to head
+			bool headshot=inflictor&&(
+				(
+					inflictor.player
+					&&inflictor.pitch<-3.2
+				)||(
+					HDHumanoid(inflictor)
+					&&damage>50
+				)
+			);
+			if(!headshot){
+				//damage=int(damage*(1.-(alv*0.1)));
+				damage=damage;//literally no head protection
+			}
+		}else{
+			//any other damage not taken care of above
+			resist+=30*alv;//-40% overall resistance
+			if(resist>0){
+				damage-=resist;
+				tobash=min(originaldamage,resist)>>random(0,2);
+			}
+			armourdamage=random(0,originaldamage>>random(1,3));
+		}
+
+
+
+		if(hd_debug)console.printf(owner.gettag().."  took "..originaldamage.." "..mod.." from "..(source?source.gettag():"the world")..((inflictor&&inflictor!=source)?("'s "..inflictor.gettag()):"").."  converted "..tobash.."  final "..damage.."   lost "..armourdamage);
+
+
+		//set up attack position for puff and knockback
+		vector3 puffpos=victim.pos;
+		if(
+			inflictor
+			&&inflictor!=source
+		)puffpos=inflictor.pos;
+		else if(
+			source
+			&&source.pos.xy!=victim.pos.xy
+		)puffpos=(
+			victim.pos.xy+victim.radius*(source.pos.xy-victim.pos.xy).unit()
+			,victim.pos.z+min(victim.height,source.height*0.6)
+		);
+		else puffpos=(victim.pos.xy,victim.pos.z+victim.height*0.6);
+
+		//add some knockback even when target unhurt
+		if(
+			damage<1
+			&&tobash<1
+			&&victim.health>0
+			&&victim.height>victim.radius*1.6
+			&&victim.pos!=puffpos
+		){
+			victim.vel+=(victim.pos-puffpos).unit()*0.01*originaldamage;
+			let hdp=hdplayerpawn(victim);
+			if(
+				hdp
+				&&!hdp.incapacitated
+			){
+				hdp.wepbobrecoil2+=(frandom(-5.,5.),frandom(2.5,4.))*0.01*originaldamage;
+				hdp.playrunning();
+			}else if(random(0,255)<victim.painchance)hdmobbase.forcepain(victim);
+		}
+
+		//armour breaks up visibly
+		if(armourdamage>3){
+			actor ppp=spawn("FragPuff",puffpos);
+			ppp.vel+=victim.vel;
+		}
+		if(armourdamage>random(0,2)){
+			vector3 prnd=(frandom(-1,1),frandom(-1,1),frandom(-1,1));
+			actor ppp=spawn("WallChunk",puffpos+prnd);
+			ppp.vel+=victim.vel+(puffpos-owner.pos).unit()*3+prnd;
+		}
+
+
+		//apply stuff
+		if(tobash>0)victim.damagemobj(
+			inflictor,source,min(tobash,victim.health-1),
+			"bashing",DMG_NO_ARMOR|DMG_THRUSTLESS
+		);
+
+		if(armourdamage>0)durability-=armourdamage;
+		if(durability<1)destroy();
+
+		return damage,mod,flags,towound,toburn,tostun,tobreak;
+	}
+
+	//called from HDBulletActor's OnHitActor
+	override double,double OnBulletImpact(
+		HDBulletActor bullet,
+		double pen,
+		double penshell,
+		double hitangle,
+		double deemedwidth,
+		vector3 hitpos,
+		vector3 vu,
+		bool hitactoristall
+	){
+		let hitactor=owner;
+		if(!owner)return 0,0;
+		let hdp=HDPlayerPawn(hitactor);
+		let hdmb=HDMobBase(hitactor);
+
+		//if standing right over an incap'd victim, bypass armour
+		if(
+			bullet.pitch>80
+			&&(
+				(hdp&&hdp.incapacitated)
+				||(
+					hdmb
+					&&hdmb.frame>=hdmb.downedframe
+					&&hdmb.instatesequence(hdmb.curstate,hdmb.resolvestate("falldown"))
+				)
+			)
+			&&!!bullet.target
+			&&abs(bullet.target.pos.z-bullet.pos.z)<bullet.target.height
+		)return pen,penshell;
+
+		double hitheight=hitactoristall?((hitpos.z-hitactor.pos.z)/hitactor.height):0.5;
+
+		double addpenshell=(10+max(0,((durability-40)>>3)));
+
+		//poorer armour on legs and head
+		//sometimes slip through a gap
+		int crackseed=int(level.time+angle)&(1|2|4|8|16|32);
+		if(hitheight>0.8){
+			addpenshell=-1;
+		}else if(hitheight<0.4){
+			//legs: gaps and thinner (but not that much thinner) material
+			if(crackseed>clamp(durability,1,8))
+				addpenshell*=frandom(frandom(0,0.5),1.);
+		}else if(
+			crackseed>max(durability,8)
+		){
+			//torso: just kinda uneven
+			addpenshell*=frandom(0.4,0.6);
+		}
+
+		int armourdamage=0;
+
+
+		if(addpenshell>0){
+			//degrade and puff
+			double bad=min(pen,addpenshell)*bullet.stamina*0.0005;
+			armourdamage=random(-1,int(bad));
+
+			if(
+				!armourdamage
+				&&bad
+				&&frandom(0,3)<bad
+			)armourdamage=1;
+
+			if(armourdamage>0){
+				actor p=spawn(armourdamage>2?"FragPuff":"WallChunk",bullet.pos,ALLOW_REPLACE);
+				if(p)p.vel=hitactor.vel-vu*2+(frandom(-1,1),frandom(-1,1),frandom(-1,3));
+			}else if(pen>addpenshell)armourdamage=1;
+		}else if(addpenshell>-0.5){
+			//bullet leaves a hole in the webbing
+			armourdamage+=max(random(0,1),(bullet.stamina>>7));
+		}
+		else if(hd_debug)console.printf("missed the armour!");
+
+		if(hd_debug)console.printf(hitactor.getclassname().."  armour resistance:  "..addpenshell);
+		penshell+=addpenshell;
+
+
+		//add some knockback even when target unhurt
+		if(
+			pen>2
+			&&penshell>pen
+			&&hitactor.health>0
+			&&hitactoristall
+		){
+			hitactor.vel+=vu*0.001*hitheight*mass;
+			if(
+				hdp
+				&&!hdp.incapacitated
+			){
+				hdp.wepbobrecoil2+=(frandom(-5.,5.),frandom(2.5,4.))*0.01*hitheight*mass;
+				hdp.playrunning();
+			}else if(random(0,255)<hitactor.painchance) hdmobbase.forcepain(hitactor);
+		}
+
+
+		if(armourdamage>0)durability-=armourdamage;
+		if(durability<1)destroy();
+
+		return pen,penshell;
+	}
+
 }
 
 class JacketArmour:HDPickupGiver{
