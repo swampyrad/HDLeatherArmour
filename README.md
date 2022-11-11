@@ -7,3 +7,7 @@ Not as durable as garrison armor, but less
 bulky and easier to stash in a backpack.
 
 Loadout code: [JKT]
+
+Credits:
+
+Original HDArmour code by MatthewTheGlutton
