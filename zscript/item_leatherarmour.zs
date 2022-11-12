@@ -3,7 +3,7 @@
 //-------------------------------------------------
 const LEATHERARMOUR=50;
 const ENC_LEATHERARMOUR=160;
-
+const STRIP_JACKET=1500;
 class HDLeatherArmour:HDMagAmmo{
 	default{
 		+inventory.invbar
@@ -18,7 +18,7 @@ class HDLeatherArmour:HDMagAmmo{
 		inventory.pickupmessage "Picked up a leather jacket.";
 	}
 	
-	bool mega;
+	//bool mega;
 	int cooldown;
 	override bool isused(){return true;}
 	override int getsbarnum(int flags){
@@ -57,14 +57,14 @@ class HDLeatherArmour:HDMagAmmo{
 			return;
 		}
 
-		invoker.wornlayer=STRIP_ARMOUR;
+		invoker.wornlayer=STRIP_JACKET;//can wear a jacket over body armor
 		bool intervening=!HDPlayerPawn.CheckStrip(self,invoker,false);
 		invoker.wornlayer=0;
 
 		if(intervening){
 
 			//check if it's ONLY the armour layer that's in the way
-			invoker.wornlayer=STRIP_ARMOUR+1;
+			invoker.wornlayer=STRIP_JACKET+1;
 			bool notarmour=!HDPlayerPawn.CheckStrip(self,invoker,false);
 			invoker.wornlayer=0;
 
@@ -110,20 +110,13 @@ class HDLeatherArmour:HDMagAmmo{
 		for(int i=0;i<amount;i++){
 			mags[i]=min(mags[i],LEATHERARMOUR);
 		}
-		//checkmega();
 	}
 
 	override inventory createtossable(int amt){
 		let sct=super.createtossable(amt);
 		return sct;
 	}
-/*
-    bool checkmega(){
-		mega=0;
-		icon=texman.checkfortexture("JAKTA0",TexMan.Type_MiscPatch);
-		return mega;
-	}
-*/
+
 	override void beginplay(){
 		super.beginplay();
 		cooldown=0;
@@ -147,7 +140,7 @@ class HDLeatherArmour:HDMagAmmo{
 			&&other.player.cmd.buttons&BT_USE
 			&&!other.findinventory("HDLeatherArmourWorn")
 		){
-			wornlayer=STRIP_ARMOUR;
+			wornlayer=STRIP_JACKET;
 			bool intervening=!HDPlayerPawn.CheckStrip(other,self,false);
 			wornlayer=0;
 
@@ -217,6 +210,9 @@ class HDLeatherArmourWorn:HDArmourWorn{
 		HDArmourworn.ismega false;
 		inventory.maxamount 1;
 		tag "leather jacket";
+		HDDamageHandler.priority 0;
+		HDPickup.overlaypriority 10000;
+		HDPickup.wornlayer STRIP_JACKET;
 	}
 	override void beginplay(){
 		durability=LEATHERARMOUR;
@@ -239,7 +235,7 @@ class HDLeatherArmourWorn:HDArmourWorn{
 	){
 		vector2 coords=
 			(hdflags&HDSB_AUTOMAP)?(4,86):
-			(hdflags&HDSB_MUGSHOT)?((sb.hudlevel==1?-85:-55),-4):
+			(hdflags&HDSB_MUGSHOT)?((sb.hudlevel==1?-85:-55),-11):
 			(0,-sb.mIndexFont.mFont.GetHeight()*2)
 		;
 		string armoursprite="JAKTA0";//front layer
@@ -252,7 +248,7 @@ class HDLeatherArmourWorn:HDArmourWorn{
 		);
 		sb.drawstring(
 			sb.pnewsmallfont,sb.FormatNumber(durability),
-			coords+(10,-7),gzflags|sb.DI_ITEM_CENTER|sb.DI_TEXT_ALIGN_RIGHT,
+			coords+(10,-17),gzflags|sb.DI_ITEM_CENTER|sb.DI_TEXT_ALIGN_RIGHT,
 			Font.CR_DARKGRAY,scale:(0.5,0.5)
 		);
 	}
